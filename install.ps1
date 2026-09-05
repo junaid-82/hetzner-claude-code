@@ -1,5 +1,6 @@
-# Points Claude Code at DeepSeek.
+# Points Claude Code at DeepSeek, installing Claude Code first if it is missing.
 # Runs on Windows PowerShell 5.1 and PowerShell 7+.
+# Settings follow https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/
 
 $ErrorActionPreference = 'Stop'
 $Base = 'https://api.deepseek.com/anthropic'
@@ -16,6 +17,13 @@ function Fail {
     exit 1
 }
 
+function Refresh-Path {
+    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
+                [Environment]::GetEnvironmentVariable('Path', 'User')
+}
+
+function Have { param([string]$Name) [bool](Get-Command $Name -ErrorAction SilentlyContinue) }
+
 Write-Host "`nClaude Code on DeepSeek" -ForegroundColor Cyan
 Write-Host "=======================`n" -ForegroundColor Cyan
 
@@ -27,27 +35,58 @@ if (-not $key) {
 }
 if (-not $key) { Fail 'The installer needs a DeepSeek API key.' 'Create one at https://platform.deepseek.com then run this again.' }
 
-# --- verify before changing anything ---
+# --- verify the key before changing or installing anything ---
 Write-Host 'Checking the key...' -ForegroundColor Gray
-$body = @{ model = $Small; max_tokens = 32; messages = @(@{ role = 'user'; content = 'Say PONG' }) } | ConvertTo-Json -Depth 5
+# 256 tokens for this one check: these models think first, and a small budget leaves no reply.
+$body = @{ model = $Small; max_tokens = 256; messages = @(@{ role = 'user'; content = 'Say PONG' }) } | ConvertTo-Json -Depth 5
 try {
     $reply = Invoke-RestMethod "$Base/v1/messages" -Method Post -TimeoutSec 60 -ContentType 'application/json' -Body $body `
         -Headers @{ Authorization = "Bearer $key"; 'anthropic-version' = '2023-06-01' }
-    Write-Host "  Key works. DeepSeek replied: $($reply.content[0].text)" -ForegroundColor Green
+    $said = ($reply.content | Where-Object { $_.type -eq 'text' } | Select-Object -First 1).text
+    if ($said) { Write-Host "  Key works. DeepSeek replied: $said" -ForegroundColor Green }
+    else { Write-Host '  Key works.' -ForegroundColor Green }
 } catch {
     $raw = if ($_.ErrorDetails) { $_.ErrorDetails.Message } else { $_.Exception.Message }
     try { $detail = ($raw | ConvertFrom-Json).error.message } catch { $detail = $raw }
     Fail "DeepSeek said: $detail" 'Check the key and your balance at https://platform.deepseek.com, then run this again.'
 }
 
+# --- Claude Code and its prerequisites ---
+if (Have 'claude') {
+    Write-Host "  Claude Code is already installed." -ForegroundColor Green
+} else {
+    $winget = Have 'winget'
+    foreach ($need in @(
+            @{ Cmd = 'node'; Id = 'OpenJS.NodeJS.LTS'; Name = 'Node.js' },
+            @{ Cmd = 'git'; Id = 'Git.Git'; Name = 'Git for Windows' })) {
+        if (Have $need.Cmd) { continue }
+        if (-not $winget) { Fail "$($need.Name) is required and winget is unavailable." "Install $($need.Name) manually, then run this again." }
+        Write-Host "  Installing $($need.Name). This takes a few minutes." -ForegroundColor Yellow
+        winget install --id $need.Id -e --accept-source-agreements --accept-package-agreements | Out-Host
+        Refresh-Path
+        if (-not (Have $need.Cmd)) { Fail "$($need.Name) did not install." "Install it manually, reopen PowerShell, then run this again." }
+    }
+
+    Write-Host '  Installing Claude Code...' -ForegroundColor Yellow
+    & npm install -g @anthropic-ai/claude-code | Out-Host
+    Refresh-Path
+    if (-not (Have 'claude')) {
+        Fail 'Claude Code did not install.' 'Run "npm install -g @anthropic-ai/claude-code" yourself, then run this again.'
+    }
+    Write-Host "  Claude Code installed: $(& claude --version)" -ForegroundColor Green
+}
+
 # --- settings ---
 $settings = [ordered]@{
-    ANTHROPIC_BASE_URL             = $Base
-    ANTHROPIC_AUTH_TOKEN           = $key
-    ANTHROPIC_MODEL                = $Big
-    ANTHROPIC_DEFAULT_OPUS_MODEL   = $Big
-    ANTHROPIC_DEFAULT_SONNET_MODEL = $Big
-    ANTHROPIC_DEFAULT_HAIKU_MODEL  = $Small
+    ANTHROPIC_BASE_URL              = $Base
+    ANTHROPIC_AUTH_TOKEN            = $key
+    ANTHROPIC_MODEL                 = $Big
+    ANTHROPIC_DEFAULT_OPUS_MODEL    = $Big
+    ANTHROPIC_DEFAULT_SONNET_MODEL  = $Big
+    ANTHROPIC_DEFAULT_HAIKU_MODEL   = $Small
+    CLAUDE_CODE_SUBAGENT_MODEL      = $Small
+    CLAUDE_CODE_EFFORT_LEVEL        = 'max'
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW = '786432'
 }
 
 # Keep what was there, so uninstall restores it.
@@ -75,9 +114,5 @@ if ([Environment]::GetEnvironmentVariable('ANTHROPIC_API_KEY', 'User')) {
 
 Write-Host "`nDone." -ForegroundColor Green
 Write-Host "  Model: $Big  (background tasks use $Small)"
-if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
-    Write-Host "`nClaude Code is not installed yet:" -ForegroundColor Yellow
-    Write-Host '  npm install -g @anthropic-ai/claude-code' -ForegroundColor Cyan
-}
 Write-Host "`nNEXT: close this window, open a new PowerShell window, then run:" -ForegroundColor Yellow
 Write-Host '  claude' -ForegroundColor Cyan
