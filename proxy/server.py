@@ -295,6 +295,10 @@ def call_hetzner(payload):
             if error.code == 429:
                 problem = "Hetzner rate limit reached (10 requests per minute)."
                 wait = max(wait, _retry_after(error, 20.0))
+            elif error.code == 503:
+                problem = ("Hetzner has no capacity for %s right now. This is an outage on "
+                           "Hetzner's free service rather than a problem with your setup, so "
+                           "try again later." % HETZNER_MODEL)
             else:
                 problem = "Hetzner returned HTTP %d: %s" % (error.code, body[:500])
             if final_attempt or error.code not in RETRY_STATUSES:
