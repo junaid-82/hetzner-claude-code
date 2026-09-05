@@ -23,7 +23,7 @@ DeepSeek serves Anthropic's own API format, so Claude Code talks to it directly.
 **2.** Paste this and press Enter:
 
 ```powershell
-irm https://raw.githubusercontent.com/junaid-82/hetzner-claude-code/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/junaid-82/claude-code-deepseek/main/install.ps1 | iex
 ```
 
 **3.** Paste your DeepSeek key. It stays hidden while you paste — that is normal.
@@ -56,7 +56,7 @@ Anything already in those settings is saved to `%LOCALAPPDATA%\claude-code-deeps
 ## Undo
 
 ```powershell
-irm https://raw.githubusercontent.com/junaid-82/hetzner-claude-code/main/uninstall.ps1 | iex
+irm https://raw.githubusercontent.com/junaid-82/claude-code-deepseek/main/uninstall.ps1 | iex
 ```
 
 ---
