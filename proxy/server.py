@@ -498,10 +498,16 @@ def main():
             "or set HCC_ALLOW_NO_AUTH=1 to open it to every local program.")
         raise SystemExit(2)
 
+    try:
+        server = ThreadingHTTPServer((HOST, PORT), Handler)
+    except OSError as error:
+        log("port %d is busy (%s). Stop the other bridge, then start again." % (PORT, error))
+        raise SystemExit(3)
+
     log("listening on http://%s:%d" % (HOST, PORT))
     log("backend %s/chat/completions" % HETZNER_BASE)
     log("model %s" % HETZNER_MODEL)
-    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+    server.serve_forever()
 
 
 if __name__ == "__main__":

@@ -223,21 +223,28 @@ Write-Step 'Starting the bridge and checking your Hetzner key...'
 & (Join-Path $InstallDir 'stop.ps1') | Out-Null
 
 $logPath = Join-Path $InstallDir 'bridge.log'
-Start-Process -FilePath $launcher `
+$bridge = Start-Process -FilePath $launcher `
     -ArgumentList @((Join-Path $InstallDir 'proxy\server.py')) `
     -WorkingDirectory $InstallDir `
-    -WindowStyle Hidden `
-    -RedirectStandardError $logPath | Out-Null
+    -WindowStyle Hidden -PassThru `
+    -RedirectStandardOutput (Join-Path $InstallDir 'bridge.out.log') `
+    -RedirectStandardError $logPath
 
+# A first launch can be slow while antivirus inspects Python, so allow a generous window
+# and stop early once the bridge process itself goes away.
 $headers = @{ Authorization = ('Bearer ' + $localToken) }
 $ready = $false
 $reason = ''
-for ($i = 0; $i -lt 40; $i++) {
+for ($i = 0; $i -lt 120; $i++) {
     Start-Sleep -Milliseconds 500
     try {
         $health = Invoke-RestMethod -Uri ('http://127.0.0.1:' + $Port + '/health') -Headers $headers -TimeoutSec 3
         if ($health.ok) { $ready = $true; break }
     } catch { $reason = $_.Exception.Message }
+    if ($bridge -and $bridge.HasExited) {
+        $reason = 'The bridge stopped during startup.'
+        break
+    }
 }
 if ($ready -eq $false) {
     $logTail = ''
