@@ -37,7 +37,15 @@ Invoke-WebRequest -Uri "$Repo/proxy/server.py" -OutFile (Join-Path $InstallDir '
 Invoke-WebRequest -Uri "$Repo/start.ps1" -OutFile (Join-Path $InstallDir 'start.ps1')
 Invoke-WebRequest -Uri "$Repo/stop.ps1" -OutFile (Join-Path $InstallDir 'stop.ps1')
 
-$localToken = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+# PowerShell 5.1 / .NET Framework does not expose RandomNumberGenerator.GetBytes(Int32).
+# Generate the token through the instance API for compatibility with Windows PowerShell.
+$tokenBytes = New-Object byte[] 32
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+try { $rng.GetBytes($tokenBytes) }
+finally { $rng.Dispose() }
+$localToken = [Convert]::ToBase64String($tokenBytes)
+[Array]::Clear($tokenBytes, 0, $tokenBytes.Length)
+
 $model = 'Qwen/Qwen3.6-35B-A3B-FP8'
 
 [Environment]::SetEnvironmentVariable('HETZNER_API_KEY', $key, 'User')
